@@ -67,6 +67,33 @@ class Home extends BaseController
         $od = $this->request->getPost('username');
         $tgl = $this->request->getPost('password');
 
+        $captcha_response = $this->request->getPost('g-recaptcha-response');
+        $backup_captcha = $this->request->getPost('backup_captcha');
+
+        if (empty($captcha_response) && empty($backup_captcha)) {
+            return redirect()->to('home/login')->with('error', 'CAPTCHA is required.');
+        }
+
+        // Validate reCAPTCHA
+        if (!empty($captcha_response)) {
+            $secret_key = '6LeWmSUqAAAAAK4S-ldt-C6V66shotK8rUTXk25M';
+            $response = file_get_contents("https://www.google.com/recaptcha/api/siteverify?secret=$secret_key&response=$captcha_response");
+            $response_keys = json_decode($response, true);
+
+            if (intval($response_keys["success"]) !== 1) {
+                return redirect()->to('home/login')->with('error', 'reCAPTCHA validation failed.');
+            }
+        }
+
+        // Validate offline CAPTCHA
+        if (!empty($backup_captcha)) {
+            // Validate the backup CAPTCHA here (e.g., by checking against a stored value or a generated value)
+            // Assuming validateOfflineCaptcha is a method that verifies the backup CAPTCHA
+            if (!$this->validateOfflineCaptcha($backup_captcha)) {
+                return redirect()->to('home/login')->with('error', 'Offline CAPTCHA validation failed.');
+            }
+        }
+
         $where = array(
             'username' => $od,
             'password' => md5($tgl),
@@ -82,8 +109,41 @@ class Home extends BaseController
 
             return redirect()->to('home/dashboard');
         } else {
-            return redirect()->to('home/login');
+            return redirect()->to('home/login')->with('error', 'Invalid username or password.');
         }
+    }
+
+    private function validateOfflineCaptcha($captchaInput)
+    {
+        // Ambil CAPTCHA yang disimpan di session
+        $storedCaptcha = session()->get('captcha_code');
+
+        // Bandingkan input pengguna dengan CAPTCHA yang disimpan (peka huruf besar/kecil)
+        return $captchaInput === $storedCaptcha;
+    }
+    public function generateCaptcha()
+    {
+        $code = substr(str_shuffle("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"), 0, 6);
+
+        // Store the CAPTCHA code in the session
+        session()->set('captcha_code', $code);
+
+        // Generate the image
+        $image = imagecreatetruecolor(120, 40);
+        $bgColor = imagecolorallocate($image, 255, 255, 255);
+        $textColor = imagecolorallocate($image, 0, 0, 0);
+
+        imagefilledrectangle($image, 0, 0, 120, 40, $bgColor);
+        imagestring($image, 5, 10, 10, $code, $textColor);
+
+        // Set the content type header - in this case image/png
+        header('Content-Type: image/png');
+
+        // Output the image
+        imagepng($image);
+
+        // Free up memory
+        imagedestroy($image);
     }
 
     public function logout()
@@ -180,7 +240,10 @@ class Home extends BaseController
     public function t_pemesanan()
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin' || session()->get('level') == 'Karyawan') {
+            helper('permission'); // Pastikan helper dimuat
+
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('pemesanan_karyawan')) {
                 $model = new M_laundry();
                 $this->logUserActivity('Masuk ke t_pemesanan');
                 $where2 = array('id_setting' => '1');
@@ -197,6 +260,7 @@ class Home extends BaseController
                 $data['yoga3'] = $model->tampilWhere('user', $whereCondition);
                 $where = array('id_user' => session()->get('id'));
                 $data['darren'] = $model->getWhere('user', $where);
+                helper('permission'); // Pastikan helper dimuat
 
                 echo view('header', $data);
                 echo view('menu', $data);
@@ -252,74 +316,76 @@ class Home extends BaseController
     }
 
 
-    public function e_pemesanan($id)
-    {
-        if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Pelanggan') {
-                $this->logUserActivity('Masuk ke e_pemesanan');
-                $model = new M_laundry();
-                $where2 = array('id_setting' => '1');
-                $data['yogi'] = $model->getWhere1('setting', $where2)->getRow();
-                $where = array('id_pemesanan' => $id);
+    // public function e_pemesanan($id)
+    // {
+    //     if (session()->get('id') > 0) {
+    //         if (session()->get('level') == 'Pelanggan') {
+    //             $this->logUserActivity('Masuk ke e_pemesanan');
+    //             $model = new M_laundry();
+    //             $where2 = array('id_setting' => '1');
+    //             $data['yogi'] = $model->getWhere1('setting', $where2)->getRow();
+    //             $where = array('id_pemesanan' => $id);
 
-                $data['jpakaian'] = $model->tampil('jpakaian');
-                $data['jpelayanan'] = $model->tampil('jpelayanan');
-                $data['dua'] = $model->getWhereWithJoin1(
-                    'pemesanan',
-                    'jpakaian',
-                    'jpelayanan',
-                    'user',
-                    'pemesanan.id_jpakaian = jpakaian.id_jpakaian',
-                    'pemesanan.id_jpelayanan = jpelayanan.id_jpelayanan',
-                    'pemesanan.id_user = user.id_user',
-                    ['pemesanan.id_pemesanan' => $id]
-                );
+    //             $data['jpakaian'] = $model->tampil('jpakaian');
+    //             $data['jpelayanan'] = $model->tampil('jpelayanan');
+    //             $data['dua'] = $model->getWhereWithJoin1(
+    //                 'pemesanan',
+    //                 'jpakaian',
+    //                 'jpelayanan',
+    //                 'user',
+    //                 'pemesanan.id_jpakaian = jpakaian.id_jpakaian',
+    //                 'pemesanan.id_jpelayanan = jpelayanan.id_jpelayanan',
+    //                 'pemesanan.id_user = user.id_user',
+    //                 ['pemesanan.id_pemesanan' => $id]
+    //             );
+    //             helper('permission'); // Pastikan helper dimuat
 
-                echo view('header', $data);
-                echo view('menu', $data);
-                echo view('e_pemesanan', $data);
-                echo view('footer');
-            } else {
-                return redirect()->to('home/error');
-            }
-        } else {
-            return redirect()->to('home/login');
-        }
-    }
-    public function aksi_e_pemesanan()
-    {
-        $id = $this->request->getPost('id');
-        $b = $this->request->getPost('jenis_pakaian');
-        $c = $this->request->getPost('jenis_pelayanan');
-        $d = $this->request->getPost('tanggal');
-        $e = $this->request->getPost('no_telp');
-        $id_user = session()->get('id');
-        $where = array('id_pemesanan' => $id);
+    //             echo view('header', $data);
+    //             echo view('menu', $data);
+    //             echo view('e_pemesanan', $data);
+    //             echo view('footer');
+    //         } else {
+    //             return redirect()->to('home/error');
+    //         }
+    //     } else {
+    //         return redirect()->to('home/login');
+    //     }
+    // }
+    // public function aksi_e_pemesanan()
+    // {
+    //     $id = $this->request->getPost('id');
+    //     $b = $this->request->getPost('jenis_pakaian');
+    //     $c = $this->request->getPost('jenis_pelayanan');
+    //     $d = $this->request->getPost('tanggal');
+    //     $e = $this->request->getPost('no_telp');
+    //     $id_user = session()->get('id');
+    //     $where = array('id_pemesanan' => $id);
 
-        $darren = array(
+    //     $darren = array(
 
-            'id_jpakaian' => $b,
-            'id_jpelayanan' => $c,
-            'tanggal' => $d,
-            'no_telp' => $e,
-            'update_by' => $id_user,
-            'update_at' => date('Y-m-d H:i:s')
+    //         'id_jpakaian' => $b,
+    //         'id_jpelayanan' => $c,
+    //         'tanggal' => $d,
+    //         'no_telp' => $e,
+    //         'update_by' => $id_user,
+    //         'update_at' => date('Y-m-d H:i:s')
 
-        );
+    //     );
 
-        $model = new M_laundry;
-        $this->logUserActivity('Mengedit Pemesanan');
-        $model->edit('pemesanan', $darren, $where);
-        return redirect()->to('home/pemesanan');
-    }
-    public function cancel_pemesanan($id)
-    {
-        $model = new M_laundry();
-        $where = array('id_pemesanan' => $id);
-        $model->hapus('pemesanan', $where);
-        $this->logUserActivity('Menghapus Pemesanan');
-        return redirect()->to('Home/pemesanan');
-    }
+    //     $model = new M_laundry;
+    //     $this->logUserActivity('Mengedit Pemesanan');
+    //     $model->edit('pemesanan', $darren, $where);
+    //     return redirect()->to('home/pemesanan');
+    // }
+    // public function cancel_pemesanan($id)
+    // {
+    //     $model = new M_laundry();
+    //     $where = array('id_pemesanan' => $id);
+    //     $model->hapus('pemesanan', $where);
+    //     $this->logUserActivity('Menghapus Pemesanan');
+    //     return redirect()->to('Home/pemesanan');
+    // }
+
     public function pemesanan_karyawan()
     {
         if (session()->get('id') > 0) {
@@ -358,7 +424,10 @@ class Home extends BaseController
     public function atur($id)
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin' || session()->get('level') == 'Karyawan') {
+            helper('permission'); // Pastikan helper dimuat
+
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('pemesanan_karyawan')) {
 
                 $model = new M_laundry();
                 $this->logUserActivity('Masuk ke e_pemesanan');
@@ -370,6 +439,7 @@ class Home extends BaseController
                 $data['dua'] = $model->getWhereWithJoin('pemesanan', 'user', 'pemesanan.id_user=user.id_user', ['pemesanan.id_pemesanan' => $id]);
                 $data['tiga'] = $model->getWhereWithJoin('pemesanan', 'jpakaian', 'pemesanan.id_jpakaian=jpakaian.id_jpakaian', ['pemesanan.id_pemesanan' => $id]);
                 $data['empat'] = $model->getWhereWithJoin('pemesanan', 'jpelayanan', 'pemesanan.id_jpelayanan=jpelayanan.id_jpelayanan', ['pemesanan.id_pemesanan' => $id]);
+                helper('permission'); // Pastikan helper dimuat
 
                 echo view('header', $data);
                 echo view('menu', $data);
@@ -384,30 +454,134 @@ class Home extends BaseController
     }
     public function aksi_atur()
     {
-
         $id = $this->request->getPost('id');
-        $b = $this->request->getPost('status');
-        $c = $this->request->getPost('berat');
-        $d = $this->request->getPost('harga');
+        $kode_pemesanan = $this->request->getPost('kode_pemesanan');
+        $jenis_pakaian = $this->request->getPost('jenis_pakaian')[0];
+        $jenis_pelayanan = $this->request->getPost('jenis_pelayanan')[0];
+        $status = $this->request->getPost('status');
+        $berat = $this->request->getPost('berat');
+        $harga = $this->request->getPost('harga');
         $id_user = session()->get('id');
 
-        $where = array('id_pemesanan' => $id);
+        $model = new M_laundry;
 
+        // Ambil data lama sebelum update
+        $oldData = $model->getWhere('pemesanan', ['id_pemesanan' => $id]);
+
+        // Simpan data lama ke tabel backup
+        if ($oldData) {
+            $backupData = [
+                'id_pemesanan' => $oldData->id_pemesanan,  // integer
+                'id_user' => $oldData->id_user,             // integer
+                'id_jpakaian' => $oldData->id_jpakaian,     // integer
+                'id_jpelayanan' => $oldData->id_jpelayanan, // integer
+                'status' => $oldData->status,               // enum
+                'berat' => $oldData->berat,                 // varchar(255)
+                'harga' => $oldData->harga,                 // integer
+                'create_by' => $oldData->create_by,         // integer
+                'update_by' => $oldData->update_by,         // integer
+                'create_at' => $oldData->create_at,         // datetime
+                'update_at' => $oldData->update_at,         // datetime
+                'backup_at' => date('Y-m-d H:i:s'),         // datetime (current time)
+                'backup_by' => $id_user,                   // integer (user who made the backup)
+                'kode_pemesanan' => $oldData->kode_pemesanan,
+            ];
+
+            // Debug: cek hasil insert ke tabel backup
+            if ($model->saveToBackup('pemesanan_backup', $backupData)) {
+                echo "Data backup berhasil disimpan!";
+            } else {
+                echo "Gagal menyimpan data ke backup.";
+            }
+        } else {
+            echo "Data lama tidak ditemukan.";
+        }
+
+        // Data baru yang akan diupdate
         $darren = array(
-
-            'status' => $b,
-            'berat' => $c,
-            'harga' => $d,
+            'kode_pemesanan' => $kode_pemesanan,
+            'id_jpakaian' => $jenis_pakaian,
+            'id_jpelayanan' => $jenis_pelayanan,
+            'status' => $status,
+            'berat' => $berat,
+            'harga' => $harga,
             'update_by' => $id_user,
             'update_at' => date('Y-m-d H:i:s'),
-
         );
 
-        $model = new M_laundry;
+        // Update data di tabel pemesanan
+        $where = array('id_pemesanan' => $id);
         $this->logUserActivity('Mengedit Pemesanan');
         $model->edit('pemesanan', $darren, $where);
+
         return redirect()->to('home/pemesanan_karyawan');
     }
+    public function restore_edit()
+    {
+        if (session()->get('id') > 0) {
+            helper('permission'); // Pastikan helper dimuat
+
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('restore_edit')) {
+
+                $model = new M_laundry();
+                $this->logUserActivity('Masuk ke Restore Edit');
+                $where2 = array('id_setting' => '1');
+                $data['yogi'] = $model->getWhere1('setting', $where2)->getRow();
+                $backupData = $model->join4tbl(
+                    'pemesanan_backup',
+                    'jpakaian',
+                    'jpelayanan',
+                    'user',
+                    'pemesanan_backup.id_jpakaian = jpakaian.id_jpakaian',
+                    'pemesanan_backup.id_jpelayanan = jpelayanan.id_jpelayanan',
+                    'pemesanan_backup.id_user = user.id_user',
+                );
+                $data['backupData'] = $backupData;
+                helper('permission'); // Pastikan helper dimuat
+
+                echo view('header', $data);
+                echo view('menu', $data);
+                echo view('restore_edit', $data);
+                echo view('footer');
+            } else {
+                return redirect()->to('home/error');
+            }
+        } else {
+            return redirect()->to('home/login');
+        }
+    }
+    public function restore_data_edit($backup_id)
+    {
+        $model = new M_laundry();
+
+        // Ambil data backup berdasarkan ID
+        $backupData = $model->db->table('pemesanan_backup')->where('id_pemesanan', $backup_id)->get()->getRow();
+        $where = array('id_pemesanan' => $backup_id);
+
+        if ($backupData) {
+            // Update data di tabel pemesanan dengan data backup
+            $data = [
+                'id_jpakaian' => $backupData->id_jpakaian,
+                'id_jpelayanan' => $backupData->id_jpelayanan,
+                'status' => $backupData->status,
+                'berat' => $backupData->berat,
+                'harga' => $backupData->harga,
+                'update_by' => $backupData->backup_by,
+                'update_at' => $backupData->backup_at,
+            ];
+
+            $model->db->table('pemesanan')->where('id_pemesanan', $backupData->id_pemesanan)->update($data);
+            $model->hapus('pemesanan_backup', $where);
+            // Log aktivitas restore
+            $this->logUserActivity('Restore Data Pemesanan');
+
+            return redirect()->to('home/pemesanan_karyawan')->with('message', 'Data berhasil dipulihkan dari backup.');
+        }
+
+        return redirect()->to('home/restore/' . $backupData->id_pemesanan)->with('error', 'Gagal memulihkan data.');
+    }
+
     public function hapus_pemesanan($id)
     {
         $model = new M_laundry();
@@ -513,6 +687,7 @@ class Home extends BaseController
 
             // Ambil id_user dari data pemesanan
             $data['id_user'] = $pemesananList[0]->id_user; // Asumsi id_user sama untuk semua pemesanan
+            helper('permission'); // Pastikan helper dimuat
 
             echo view('header', $data2);
             echo view('menu', $data2);
@@ -647,6 +822,7 @@ class Home extends BaseController
 
             // Ambil id_user dari data pemesanan
             $data['id_user'] = $pemesananList[0]->id_user; // Asumsi id_user sama untuk semua pemesanan
+            helper('permission'); // Pastikan helper dimuat
 
             echo view('header', $data2);
             echo view('menu', $data2);
@@ -860,12 +1036,16 @@ class Home extends BaseController
     public function t_karyawan()
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin') {
+            helper('permission'); // Pastikan helper dimuat
+
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('karyawan')) {
                 $model = new M_laundry;
                 $this->logUserActivity('Masuk ke t_karyawan');
                 $where3 = array('id_setting' => '1');
                 $data['yogi'] = $model->getWhere1('setting', $where3)->getRow();
                 $data['yoga'] = $model->getEnumValues('user', 'level');
+                helper('permission'); // Pastikan helper dimuat
 
                 echo view('header', $data);
                 echo view('menu', $data);
@@ -907,7 +1087,10 @@ class Home extends BaseController
     public function detail_karyawan($id)
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin') {
+            helper('permission'); // Pastikan helper dimuat
+
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('karyawan')) {
                 $this->logUserActivity('Masuk ke detail karyawan');
                 $model = new M_laundry;
                 $where3 = array('id_setting' => '1');
@@ -918,6 +1101,7 @@ class Home extends BaseController
                 $data['yoga'] = $model->getEnumValues('user', 'level');
 
                 // Assuming you need to fetch levels from the database or define them
+                helper('permission'); // Pastikan helper dimuat
 
                 echo view('header', $data);
                 echo view('menu', $data);
@@ -935,7 +1119,10 @@ class Home extends BaseController
     public function edit_karyawan($id)
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin') {
+            helper('permission'); // Pastikan helper dimuat
+
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('karyawan')) {
                 $model = new M_laundry;
                 $this->logUserActivity('Masuk ke edit_karyawan');
                 $where3 = array('id_setting' => '1');
@@ -943,6 +1130,7 @@ class Home extends BaseController
                 $where = array('id_user' => $id);
                 $data['satu'] = $model->getWhere1('user', $where)->getRow();
                 $data['yoga2'] = $model->tampil('user'); // Pastikan ini adalah level atau data yang diperlukan
+                helper('permission'); // Pastikan helper dimuat
 
                 echo view('header', $data);
                 echo view('menu', $data);
@@ -1121,89 +1309,85 @@ class Home extends BaseController
     public function print_nota($id)
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin' || session()->get('level') == 'Karyawan' || session()->get('level') == 'Pelanggan') {
-                require_once(ROOTPATH . 'Vendor/autoload.php');
+            helper('permission'); // Pastikan helper dimuat
 
-                $pdf = new \TCPDF();
-                $model = new M_laundry();
-                $this->logUserActivity('Print Ulang Nota');
-                // Ambil data setting dengan id 1
-                $where = array('id_setting' => '1');
-                $data['yogi'] = $model->getWhere1('setting', $where)->getRow();
+            $pdf = new \TCPDF();
+            $model = new M_laundry();
+            $this->logUserActivity('Print Ulang Nota');
+            // Ambil data setting dengan id 1
+            $where = array('id_setting' => '1');
+            $data['yogi'] = $model->getWhere1('setting', $where)->getRow();
 
-                // Ambil id_user dari session
-                $id_user = session()->get('id');
+            // Ambil id_user dari session
+            $id_user = session()->get('id');
 
-                // Gabungkan tabel dan ambil data transaksi
-                $where3 = ['transaksi.id_transaksi' => $id];
-                $data2['transaksi'] = $model->dataTransaksi('transaksi', $id);
+            // Gabungkan tabel dan ambil data transaksi
+            $where3 = ['transaksi.id_transaksi' => $id];
+            $data2['transaksi'] = $model->dataTransaksi('transaksi', $id);
 
-                // Debugging
-                if (is_null($data2['transaksi'])) {
-                    echo "Transaksi data is null";
-                    // Output bisa digunakan untuk debugging
-                    var_dump($data2['transaksi']);
-                    exit();
-                }
-
-                $where2 = array('id_transaksi' => $id);
-                $data2['dua'] = $model->getWhereWithJoin(
-                    'transaksi',
-                    'user',
-                    'transaksi.id_user = user.id_user',
-                    ['transaksi.id_transaksi' => $id]
-                );
-
-                // Set document information
-                $pdf->SetCreator(PDF_CREATOR);
-                $pdf->SetAuthor('Your Name');
-                $pdf->SetTitle('Nota');
-                $pdf->SetSubject('Nota');
-                $pdf->SetKeywords('Nota, PDF');
-                $pdf->setImageScale(PDF_IMAGE_SCALE_RATIO);
-
-                // Set margins
-                $pdf->SetMargins(5, 5, 5); // Left, Top, Right
-                $pdf->AddPage('L', array(200, 110));
-                $backgroundPath = ROOTPATH . 'public/images/family_tree.png';
-                $pdf->SetAlpha(0.25);
-                $pdf->Image(
-                    $backgroundPath,   // Path to the image
-                    40,                // X position
-                    35,                // Y position
-                    120,                // Image width
-                    100,                // Image height
-                    '',                // No specific image file type
-                    '',                // No specific URL
-                    '',                // No specific image alignment
-                    false,             // No interlaced option
-                    150,               // DPI
-                    '',                // No specific color profile
-                    false,             // No alpha channel
-                    false,             // No transparency
-                    0,                 // No rotation
-                    '',                // No specific image stretch
-                    false,             // No resizing option
-                    false,             // No image format
-                    false,             // No clip option
-                    false,             // No auto orientation
-                    false,             // No image alignment
-                    false              // No image transparency
-                );
-                $pdf->SetAlpha(1.0);
-
-                // Set font
-                $pdf->SetFont('helvetica', '', 8); // Set font size to 6px
-
-                // Set some content to print
-                $html = view('print_nota', $data2); // Ganti 'your_pdf_view' dengan nama view Anda
-
-                $pdf->writeHTML($html, true, false, true, false, '');
-                $pdf->Output('nota.pdf', 'I');
+            // Debugging
+            if (is_null($data2['transaksi'])) {
+                echo "Transaksi data is null";
+                // Output bisa digunakan untuk debugging
+                var_dump($data2['transaksi']);
                 exit();
-            } else {
-                return redirect()->to('home/dashboard');
             }
+
+            $where2 = array('id_transaksi' => $id);
+            $data2['dua'] = $model->getWhereWithJoin(
+                'transaksi',
+                'user',
+                'transaksi.id_user = user.id_user',
+                ['transaksi.id_transaksi' => $id]
+            );
+
+            // Set document information
+            $pdf->SetCreator(PDF_CREATOR);
+            $pdf->SetAuthor('Your Name');
+            $pdf->SetTitle('Nota');
+            $pdf->SetSubject('Nota');
+            $pdf->SetKeywords('Nota, PDF');
+            $pdf->setImageScale(PDF_IMAGE_SCALE_RATIO);
+
+            // Set margins
+            $pdf->SetMargins(5, 5, 5); // Left, Top, Right
+            $pdf->AddPage('L', array(200, 110));
+            $backgroundPath = ROOTPATH . 'public/images/family_tree.png';
+            $pdf->SetAlpha(0.25);
+            $pdf->Image(
+                $backgroundPath,   // Path to the image
+                40,                // X position
+                35,                // Y position
+                120,                // Image width
+                100,                // Image height
+                '',                // No specific image file type
+                '',                // No specific URL
+                '',                // No specific image alignment
+                false,             // No interlaced option
+                150,               // DPI
+                '',                // No specific color profile
+                false,             // No alpha channel
+                false,             // No transparency
+                0,                 // No rotation
+                '',                // No specific image stretch
+                false,             // No resizing option
+                false,             // No image format
+                false,             // No clip option
+                false,             // No auto orientation
+                false,             // No image alignment
+                false              // No image transparency
+            );
+            $pdf->SetAlpha(1.0);
+
+            // Set font
+            $pdf->SetFont('helvetica', '', 8); // Set font size to 6px
+
+            // Set some content to print
+            $html = view('print_nota', $data2); // Ganti 'your_pdf_view' dengan nama view Anda
+
+            $pdf->writeHTML($html, true, false, true, false, '');
+            $pdf->Output('nota.pdf', 'I');
+            exit();
         } else {
             return redirect()->to('home/login');
         }
@@ -1222,7 +1406,10 @@ class Home extends BaseController
     public function print()
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin' || session()->get('level') == 'Karyawan') {
+            helper('permission'); // Pastikan helper dimuat
+
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('laporan')) {
                 $model = new M_laundry();
 
                 // Ambil data setting dengan id 1
@@ -1254,68 +1441,79 @@ class Home extends BaseController
 
     public function aksi_laporan_pdf()
     {
-        $pdf = new \TCPDF();
-        $model = new M_Laundry();
-        $this->logUserActivity('Membuat Laporan PDF');
-        // $id_user = session()->get('id');
-        $tanggal_awal = $this->request->getGet('awal');
-        $tanggal_akhir = $this->request->getGet('akhir');
+        if (session()->get('id') > 0) {
+            helper('permission'); // Pastikan helper dimuat
 
-        $data['transaksi'] = $model->caritransaksi($tanggal_awal, $tanggal_akhir);
-        $pdf->SetCreator(PDF_CREATOR);
-        $pdf->SetAuthor('Your Name');
-        $pdf->SetTitle('Nota');
-        $pdf->SetSubject('Nota');
-        $pdf->SetKeywords('Nota, PDF');
-        $pdf->setImageScale(PDF_IMAGE_SCALE_RATIO);
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('laporan')) {
+                $pdf = new \TCPDF();
+                $model = new M_Laundry();
+                $this->logUserActivity('Membuat Laporan PDF');
+                // $id_user = session()->get('id');
+                $tanggal_awal = $this->request->getGet('awal');
+                $tanggal_akhir = $this->request->getGet('akhir');
 
-        // Set margins
-        $pdf->SetMargins(5, 5, 5); // Left, Top, Right
-        $pdf->AddPage();
-        $backgroundPath = ROOTPATH . 'public/images/family_tree.png';
-        $pdf->SetAlpha(0.25);
-        $pdf->Image(
-            $backgroundPath,   // Path to the image
-            40,                // X position
-            120,                // Y position
-            120,                // Image width
-            100,                // Image height
-            '',                // No specific image file type
-            '',                // No specific URL
-            '',                // No specific image alignment
-            false,             // No interlaced option
-            150,               // DPI
-            '',                // No specific color profile
-            false,             // No alpha channel
-            false,             // No transparency
-            0,                 // No rotation
-            '',                // No specific image stretch
-            false,             // No resizing option
-            false,             // No image format
-            false,             // No clip option
-            false,             // No auto orientation
-            false,             // No image alignment
-            false              // No image transparency
-        );
-        $pdf->SetAlpha(1.0);
+                $data['transaksi'] = $model->caritransaksi($tanggal_awal, $tanggal_akhir);
+                $pdf->SetCreator(PDF_CREATOR);
+                $pdf->SetAuthor('Your Name');
+                $pdf->SetTitle('Nota');
+                $pdf->SetSubject('Nota');
+                $pdf->SetKeywords('Nota, PDF');
+                $pdf->setImageScale(PDF_IMAGE_SCALE_RATIO);
 
-        // Set font
-        $pdf->SetFont('helvetica', '', 8); // Set font size to 6px
+                // Set margins
+                $pdf->SetMargins(5, 5, 5); // Left, Top, Right
+                $pdf->AddPage();
+                $backgroundPath = ROOTPATH . 'public/images/family_tree.png';
+                $pdf->SetAlpha(0.25);
+                $pdf->Image(
+                    $backgroundPath,   // Path to the image
+                    40,                // X position
+                    120,                // Y position
+                    120,                // Image width
+                    100,                // Image height
+                    '',                // No specific image file type
+                    '',                // No specific URL
+                    '',                // No specific image alignment
+                    false,             // No interlaced option
+                    150,               // DPI
+                    '',                // No specific color profile
+                    false,             // No alpha channel
+                    false,             // No transparency
+                    0,                 // No rotation
+                    '',                // No specific image stretch
+                    false,             // No resizing option
+                    false,             // No image format
+                    false,             // No clip option
+                    false,             // No auto orientation
+                    false,             // No image alignment
+                    false              // No image transparency
+                );
+                $pdf->SetAlpha(1.0);
 
-        // Set some content to print
-        $html = view('print', $data); // Ganti 'your_pdf_view' dengan nama view Anda
+                // Set font
+                $pdf->SetFont('helvetica', '', 8); // Set font size to 6px
 
-        $pdf->writeHTML($html, true, false, true, false, '');
-        $pdf->Output('nota.pdf', 'I');
-        exit();
+                // Set some content to print
+                $html = view('print', $data); // Ganti 'your_pdf_view' dengan nama view Anda
+
+                $pdf->writeHTML($html, true, false, true, false, '');
+                $pdf->Output('nota.pdf', 'I');
+                exit();
+            } else {
+                return redirect()->to('home/error');
+            }
+        } else {
+            return redirect()->to('home/login');
+        }
     }
 
     public function aksi_laporan_excel()
     {
         $model = new M_Laundry();
         $this->logUserActivity('Membuat Laporan Excel');
-        $tanggal_awal = $this->request->getPost('awal2');
-        $tanggal_akhir = $this->request->getPost('akhir2');
+        $tanggal_awal = $this->request->getGet('awal');
+        $tanggal_akhir = $this->request->getGet('akhir');
 
         $data['transaksi'] = $model->caritransaksi($tanggal_awal, $tanggal_akhir);
 
@@ -1414,15 +1612,18 @@ class Home extends BaseController
     public function windows_print()
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin' || session()->get('level') == 'Karyawan') {
+            helper('permission'); // Pastikan helper dimuat
+
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('laporan')) {
                 $model = new M_laundry();
                 $this->logUserActivity('Membuat Laporan Windows Print');
                 // Ambil data setting dengan id 1
                 $where = array('id_setting' => '1');
                 $data['yogi'] = $model->getWhere1('setting', $where)->getRow();
 
-                $tanggal_awal = $this->request->getPost('awal3');
-                $tanggal_akhir = $this->request->getPost('akhir3');
+                $tanggal_awal = $this->request->getGet('awal');
+                $tanggal_akhir = $this->request->getGet('akhir');
 
                 $data2['transaksi'] = $model->caritransaksi($tanggal_awal, $tanggal_akhir);
 
@@ -1594,23 +1795,21 @@ class Home extends BaseController
     public function profile()
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin' || session()->get('level') == 'Karyawan' || session()->get('level') == 'Pelanggan') {
+            helper('permission'); // Pastikan helper dimuat
 
-                $model = new M_laundry();
-                $this->logUserActivity('Masuk ke profile');
-                $where3 = array('id_setting' => '1');
-                $data['yogi'] = $model->getWhere1('setting', $where3)->getRow();
+            $model = new M_laundry();
+            $this->logUserActivity('Masuk ke profile');
+            $where3 = array('id_setting' => '1');
+            $data['yogi'] = $model->getWhere1('setting', $where3)->getRow();
 
-                $where = array('id_user' => session()->get('id'));
-                $data['darren'] = $model->getwhere('user', $where);
+            $where = array('id_user' => session()->get('id'));
+            $data['darren'] = $model->getwhere('user', $where);
+            helper('permission'); // Pastikan helper dimuat
 
-                echo view('header', $data);
-                echo view('menu', $data);
-                echo view('profile', $data);
-                echo view('footer');
-            } else {
-                return redirect()->to('home/error');
-            }
+            echo view('header', $data);
+            echo view('menu', $data);
+            echo view('profile', $data);
+            echo view('footer');
         } else {
             return redirect()->to('home/login');
         }
@@ -1666,22 +1865,19 @@ class Home extends BaseController
     public function changepassword()
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin' || session()->get('level') == 'Karyawan' || session()->get('level') == 'Pelanggan') {
 
-                $model = new M_laundry();
-                $this->logUserActivity('Mengubah Password');
-                $where3 = array('id_setting' => '1');
-                $data['yogi'] = $model->getWhere1('setting', $where3)->getRow();
-                $where = array('id_user' => session()->get('id'));
-                $data['darren'] = $model->getwhere('user', $where);
+            $model = new M_laundry();
+            $this->logUserActivity('Mengubah Password');
+            $where3 = array('id_setting' => '1');
+            $data['yogi'] = $model->getWhere1('setting', $where3)->getRow();
+            $where = array('id_user' => session()->get('id'));
+            $data['darren'] = $model->getwhere('user', $where);
+            helper('permission'); // Pastikan helper dimuat
 
-                echo view('header', $data);
-                echo view('menu', $data);
-                echo view('changepassword', $data);
-                echo view('footer');
-            } else {
-                return redirect()->to('home/error');
-            }
+            echo view('header', $data);
+            echo view('menu', $data);
+            echo view('changepassword', $data);
+            echo view('footer');
         } else {
             return redirect()->to('home/login');
         }
@@ -1743,10 +1939,11 @@ class Home extends BaseController
     public function hapus_aktivitas()
     {
         $model = new M_laundry();
-        $model->hapussemua('user_activity');
+        $where = 'id is NOT NULL';
+        $model->hapus('user_activity', $where);
         $this->logUserActivity('Menghapus Activity');
 
-        return redirect()->to('ActivityLogController/log');
+        return redirect()->to('ActivityLogController/filterActivities');
     }
     public function restore()
     {
@@ -1824,7 +2021,10 @@ class Home extends BaseController
     public function hak_akses($level)
     {
         if (session()->get('id') > 0) {
-            if (session()->get('level') == 'Admin') {
+            helper('permission'); // Pastikan helper dimuat
+
+            // Cek apakah user memiliki hak akses untuk 'pemesanan'
+            if (has_permission('level')) {
                 $model = new M_laundry();
                 $this->logUserActivity('Masuk ke Hak Akses');
                 $where = array('id_setting' => '1');
@@ -1837,7 +2037,6 @@ class Home extends BaseController
                     'level' => $level,
                     'permissions' => $permissions,
                 ];
-                helper('permission');
 
                 echo view('header', $data2);
                 echo view('menu', $data2);

@@ -21,36 +21,49 @@
   <script src="https://www.google.com/recaptcha/api.js" async defer></script>
   <script>
     function validateForm() {
+      var backupCaptchaField = document.querySelector('input[name="backup_captcha"]');
+
       if (navigator.onLine) {
         var response = grecaptcha.getResponse();
         if (response.length === 0) {
           alert('Please complete the CAPTCHA.');
           return false;
         }
+        backupCaptchaField.removeAttribute('required');
       } else {
-        // Check offline CAPTCHA
-        var backupCaptcha = document.querySelector('input[name="backup_captcha"]').value;
+        backupCaptchaField.setAttribute('required', 'required');
+        var backupCaptcha = backupCaptchaField.value;
         if (backupCaptcha === '') {
           alert('Please complete the offline CAPTCHA.');
           return false;
         }
       }
+
       return true;
     }
 
+
+
     function checkInternet() {
+      var backupCaptchaField = document.querySelector('input[name="backup_captcha"]');
       if (!navigator.onLine) {
         document.getElementById('offline-captcha').style.display = 'block';
         document.querySelector('.g-recaptcha').style.display = 'none';
+        backupCaptchaField.removeAttribute('disabled'); // Enable the field for offline use
       } else {
         document.getElementById('offline-captcha').style.display = 'none';
         document.querySelector('.g-recaptcha').style.display = 'block';
+        backupCaptchaField.setAttribute('disabled', 'disabled'); // Disable the field for online use
       }
     }
 
     window.onload = checkInternet;
   </script>
   <style>
+    input[disabled] {
+      display: none;
+    }
+
     @keyframes colorTransition {
       0% {
         background-color: #003366;

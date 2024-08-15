@@ -18,10 +18,10 @@
 
         <label for="exampleInputUsername1">Jenis Pelayanan</label>
         <select class="form-control" name="jenis_pelayanan[]">
-          <option value="<?= $empat->id_jpelayanan ?>"><?= $empat->jenis_pelayanan ?><< /option>
-              <?php foreach ($yoga2 as $item): ?>
-          <option value="<?= $item->id_jpelayanan ?>"><?= $item->jenis_pelayanan ?></option>
-        <?php endforeach; ?>
+          <option value="<?= $empat->id_jpelayanan ?>"><?= $empat->jenis_pelayanan ?></option>
+          <?php foreach ($yoga2 as $item): ?>
+            <option value="<?= $item->id_jpelayanan ?>"><?= $item->jenis_pelayanan ?></option>
+          <?php endforeach; ?>
         </select>
         <div class="form-group">
           <label for="exampleInputUsername1">Status</label>

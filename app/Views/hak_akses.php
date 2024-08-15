@@ -81,6 +81,12 @@
                     Level
                 </label>
                 <br>
+                <label>
+                    <input type="checkbox" name="permissions[]" value="restore_edit"
+                        <?= in_array('restore_edit', array_column($permissions, 'menu_name')) ? 'checked' : '' ?>>
+                    Restore Edit
+                </label>
+                <br>
                 <button type="submit" class="btn btn-primary">Simpan Hak Akses</button>
             </form>
 

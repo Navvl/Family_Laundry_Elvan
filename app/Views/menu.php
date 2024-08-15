@@ -341,12 +341,15 @@
       <!-- partial:partials/_sidebar.html -->
       <nav class="sidebar sidebar-offcanvas" id="sidebar">
         <ul class="nav">
-          <li class="nav-item">
-            <a class="nav-link" href="<?= base_url('home/dashboard') ?>">
-              <i class="mdi mdi-shopping menu-icon"></i>
-              <span class="menu-title">Dashboard</span>
-            </a>
-          </li>
+          <?php if (has_permission('dashboard')): ?>
+            <li class="nav-item">
+              <a class="nav-link" href="<?= base_url('home/dashboard') ?>">
+                <i class="mdi mdi-shopping menu-icon"></i>
+                <span class="menu-title">Dashboard</span>
+              </a>
+            </li>
+          <?php endif; ?>
+
           <?php if (has_permission('pemesanan')): ?>
             <li class="nav-item">
               <a class="nav-link" href="<?= base_url('home/pemesanan') ?>">
@@ -361,6 +364,15 @@
               <a class="nav-link" href="<?= base_url('home/restore') ?>">
                 <i class="mdi mdi-shopping menu-icon"></i>
                 <span class="menu-title">Restore Data</span>
+              </a>
+            </li>
+          <?php endif; ?>
+
+          <?php if (has_permission('restore_edit')): ?>
+            <li class="nav-item">
+              <a class="nav-link" href="<?= base_url('home/restore_edit') ?>">
+                <i class="mdi mdi-shopping menu-icon"></i>
+                <span class="menu-title">Restore Data Edit</span>
               </a>
             </li>
           <?php endif; ?>
@@ -445,7 +457,7 @@
 
           <?php if (has_permission('log_activity')): ?>
             <li class="nav-item">
-              <a class="nav-link" href="<?= base_url('ActivityLogController/log') ?>">
+              <a class="nav-link" href="<?= base_url('ActivityLogController/filterActivities') ?>">
                 <i class="typcn typcn-chart-pie-outline menu-icon"></i>
                 <span class="menu-title">Log Activity</span>
               </a>

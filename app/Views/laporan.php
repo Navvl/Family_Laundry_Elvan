@@ -13,7 +13,7 @@
         <div class="card-body">
           <h5 class="card-title">Print PDF</h5>
           <!-- Form PDF -->
-          <form action="<?= base_url('home/aksi_laporan_pdf') ?>" method="get" enctype="multipart/form-data">
+          <form action="" method="get" enctype="multipart/form-data">
             <!-- Input Tanggal Mulai -->
             <div class="row mb-3">
               <label for="awal" class="col-sm-4 col-form-label">Tanggal Awal</label>
@@ -30,7 +30,9 @@
             </div>
             <!-- Tombol Submit -->
             <div class="text-center">
-              <button type="submit" class="btn btn-secondary">PDF</button>
+              <button type="submit" formaction="<?= base_url('home/aksi_laporan_pdf') ?>" class="btn btn-secondary">PDF</button>
+              <button type="submit" formaction="<?= base_url('home/aksi_laporan_excel') ?>" class="btn btn-primary">Excel</button>
+              <button type="submit" formaction="<?= base_url('home/windows_print') ?>" class="btn btn-danger">Windows</button>
             </div>
           </form>
 
